@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import type React from "react"
 import { useForm } from "../../contexts/form-context"
 import { useRouter } from "next/navigation"
@@ -10,10 +11,37 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ProgressBar } from "@/components/ui/progress-bar"
+import mapboxgl from "mapbox-gl"
+import "mapbox-gl/dist/mapbox-gl.css"
 
 export default function GeospatialLocation() {
   const { formData, updateForm } = useForm()
   const router = useRouter()
+  const mapContainer = useRef<any>(null)
+  const map = useRef<mapboxgl.Map | null>(null)
+
+  useEffect(() => {
+    if (map.current) return // initialize map only once
+    
+    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_GL_ACCESS_TOKEN ?? ''
+    
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: [-79.7624, 43.6532], // Default to Brampton/Mississauga area
+      zoom: 10
+    })
+    
+    // Add navigation controls (zoom in/out)
+    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right')
+    
+    // Clean up on unmount
+    return () => {
+      if (map.current) {
+        map.current.remove()
+      }
+    }
+  }, [])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,12 +77,12 @@ export default function GeospatialLocation() {
       </div>
 
       <div className="px-4 py-6">
-        {/* Remove the h1 from here since it's now in the banner */}
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Placeholder for future map implementation */}
-          <div className="w-full h-[400px] bg-gray-100 rounded-lg border-2 border-[#1e3a8a] flex items-center justify-center text-gray-400">
-            Map will be implemented here
-          </div>
+          {/* Map container */}
+          <div 
+            ref={mapContainer} 
+            className="w-full h-[400px] rounded-lg border-2 border-[#1e3a8a]"
+          />
 
           <div className="flex gap-2 items-start">
             <div className="space-y-2 flex-1">
@@ -63,7 +91,7 @@ export default function GeospatialLocation() {
                 <Input
                   type="text"
                   placeholder="Enter address"
-                  value={formData.geospatial.address}
+                  value={formData.geospatial?.address || ""}
                   onChange={(e) => updateGeospatial("address", e.target.value)}
                   className="w-full border-2 border-[#1e3a8a] bg-white rounded"
                 />

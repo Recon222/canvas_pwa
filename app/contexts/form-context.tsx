@@ -69,10 +69,8 @@ interface CanvassForm {
   }
   geospatial: {
     address: string
-    coordinates?: {
-      lat: number
-      lng: number
-    }
+    latitude?: number
+    longitude?: number
   }
 }
 
@@ -122,17 +120,7 @@ export function FormProvider({ children }: { children: ReactNode }) {
       hasProprietaryPlayer: null,
     },
     vehicle: {
-      vehicles: [
-        {
-          id: "1",
-          licence: "",
-          make: "",
-          model: "",
-          colour: "",
-          style: "",
-          features: "",
-        },
-      ],
+      vehicles: [],
     },
     videoDetails: {
       hasVideo: null,
