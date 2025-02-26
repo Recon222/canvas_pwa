@@ -24,7 +24,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_MAPBOX_GL_ACCESS_TOKEN: process.env.NEXT_PUBLIC_MAPBOX_GL_ACCESS_TOKEN,
   },
-  output: 'export',
+  // output: 'export',
   // Update the basePath if you're not deploying to the root of your GitHub Pages site
   // basePath: '/pwa_canvas_app',
 }
