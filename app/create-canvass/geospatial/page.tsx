@@ -562,6 +562,7 @@ export default function GeospatialLocation() {
                     src={`https://www.google.com/maps/embed/v1/streetview?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&location=${streetViewCoords.lat},${streetViewCoords.lng}&heading=210&pitch=10&fov=90`}
                     style={{ width: '100%', height: '100%', border: 0 }}
                     allowFullScreen
+                    allow="accelerometer; gyroscope; magnetometer; geolocation"
                   />
                   <button
                     onClick={() => setShowStreetView(false)}
@@ -570,6 +571,9 @@ export default function GeospatialLocation() {
                   >
                     <X className="w-6 h-6 text-gray-700" />
                   </button>
+                  <div className="absolute bottom-4 left-4 right-4 bg-white bg-opacity-75 p-2 rounded text-xs text-center">
+                    If Street View doesn't load properly, try refreshing the page or viewing in a standalone window.
+                  </div>
                 </div>
               </div>
             )}

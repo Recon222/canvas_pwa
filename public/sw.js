@@ -18,7 +18,15 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('Opened cache');
-        return cache.addAll(urlsToCache);
+        // Cache each URL individually to be resilient against missing files
+        return Promise.allSettled(
+          urlsToCache.map(url => 
+            cache.add(url).catch(err => {
+              console.warn(`Could not cache ${url}:`, err);
+              return Promise.resolve(); // Continue despite the error
+            })
+          )
+        );
       })
   );
   // Activate immediately
