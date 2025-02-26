@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import type React from "react"
 import { useForm } from "../../contexts/form-context"
 import { useRouter } from "next/navigation"
@@ -11,37 +11,68 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ProgressBar } from "@/components/ui/progress-bar"
-import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
 
 export default function GeospatialLocation() {
   const { formData, updateForm } = useForm()
   const router = useRouter()
   const mapContainer = useRef<any>(null)
-  const map = useRef<mapboxgl.Map | null>(null)
+  const [mapLoaded, setMapLoaded] = useState(false)
 
   useEffect(() => {
-    if (map.current) return // initialize map only once
-    
-    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_GL_ACCESS_TOKEN ?? ''
-    
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [-79.7624, 43.6532], // Default to Brampton/Mississauga area
-      zoom: 10
-    })
-    
-    // Add navigation controls (zoom in/out)
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right')
-    
-    // Clean up on unmount
-    return () => {
-      if (map.current) {
-        map.current.remove()
+    // Dynamic import to ensure mapbox-gl is only loaded on the client side
+    const initializeMap = async () => {
+      if (mapLoaded) return
+      
+      try {
+        const mapboxgl = (await import('mapbox-gl')).default
+        
+        // Check if the map container exists
+        if (!mapContainer.current) return
+        
+        // Set the access token
+        mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_GL_ACCESS_TOKEN ?? ''
+        
+        // Create the map
+        const map = new mapboxgl.Map({
+          container: mapContainer.current,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: [-79.7624, 43.6532], // Default to Brampton/Mississauga area
+          zoom: 10
+        })
+        
+        // Add navigation controls
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right')
+        
+        // Set map loaded state
+        map.on('load', () => {
+          console.log('Map loaded successfully')
+          setMapLoaded(true)
+        })
+        
+        // Log any errors
+        map.on('error', (e) => {
+          console.error('Mapbox error:', e)
+        })
+        
+        // Clean up on unmount
+        return () => {
+          map.remove()
+        }
+      } catch (error) {
+        console.error('Error initializing map:', error)
       }
     }
-  }, [])
+    
+    // Initialize the map after a short delay to ensure the container is rendered
+    const timer = setTimeout(() => {
+      initializeMap()
+    }, 100)
+    
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [mapLoaded])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,7 +99,7 @@ export default function GeospatialLocation() {
       <div className="m-4 bg-[#1e3a8a] rounded-lg">
         <div className="flex items-center p-4">
           <div className="w-10 h-10 relative">
-            <Image src="/placeholder.svg" alt="Police Logo" fill className="object-contain" priority />
+            <Image src="/police-logo.png" alt="Police Logo" fill className="object-contain" priority />
           </div>
           <h1 className="flex-1 text-xl font-semibold text-white text-center">Geospatial Location Map</h1>
           <Save className="w-6 h-6 text-white" />
@@ -80,8 +111,10 @@ export default function GeospatialLocation() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Map container */}
           <div 
+            id="map"
             ref={mapContainer} 
             className="w-full h-[400px] rounded-lg border-2 border-[#1e3a8a]"
+            style={{ position: 'relative' }}
           />
 
           <div className="flex gap-2 items-start">
