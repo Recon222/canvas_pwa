@@ -5,7 +5,7 @@ import type React from "react"
 import { useForm } from "../../contexts/form-context"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { MapPin, Save } from "lucide-react"
+import { MapPin, Save, X } from "lucide-react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +25,8 @@ export default function GeospatialLocation() {
   const [currentMarker, setCurrentMarker] = useState<any>(null)
   const [mapInstance, setMapInstance] = useState<any>(null)
   const [geocoder, setGeocoder] = useState<any>(null)
+  const [showStreetView, setShowStreetView] = useState(false)
+  const [streetViewCoords, setStreetViewCoords] = useState<{lat: number, lng: number} | null>(null)
 
   useEffect(() => {
     // Dynamic import to ensure mapbox-gl is only loaded on the client side
@@ -108,8 +110,48 @@ export default function GeospatialLocation() {
             scale: 1.2 // Slightly larger than default
           });
           
+          // Create a popup for the marker
+          const popup = new mapboxgl.Popup({
+            closeButton: true,
+            closeOnClick: false,
+            maxWidth: '300px'
+          });
+          
           // Add the marker to the map but don't set position yet
-          marker.setLngLat(map.getCenter());
+          marker.setLngLat(map.getCenter()).addTo(map);
+          
+          // Add popup to marker with initial content
+          const currentDate = new Date().toLocaleString();
+          const initialCoords = map.getCenter();
+          popup.setHTML(`
+            <div style="padding: 8px;">
+              <p><strong>Created:</strong> ${currentDate}</p>
+              <p><strong>Coordinates:</strong> ${initialCoords.lat.toFixed(6)}, ${initialCoords.lng.toFixed(6)}</p>
+              <button id="street-view-btn" style="background-color: #4285F4; color: white; border: none; padding: 6px 12px; border-radius: 4px; margin-top: 8px; cursor: pointer; width: 100%;">
+                Open Google Street View
+              </button>
+            </div>
+          `);
+          marker.setPopup(popup);
+          
+          // Add event listener for Street View button
+          marker.getElement().addEventListener('click', () => {
+            setTimeout(() => {
+              const streetViewBtn = document.getElementById('street-view-btn');
+              if (streetViewBtn) {
+                streetViewBtn.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setStreetViewCoords({
+                    lat: marker.getLngLat().lat,
+                    lng: marker.getLngLat().lng
+                  });
+                  setShowStreetView(true);
+                  marker.togglePopup(); // Close the popup
+                });
+              }
+            }, 100); // Small delay to ensure the popup is rendered
+          });
           
           // Store the marker for later use
           setCurrentMarker(marker);
@@ -126,6 +168,18 @@ export default function GeospatialLocation() {
             
             // Update the marker position
             if (currentMarker) {
+              // Update popup content with new coordinates and current time
+              const currentDate = new Date().toLocaleString();
+              currentMarker.getPopup().setHTML(`
+                <div style="padding: 8px;">
+                  <p><strong>Created:</strong> ${currentDate}</p>
+                  <p><strong>Coordinates:</strong> ${latitude.toFixed(6)}, ${longitude.toFixed(6)}</p>
+                  <button id="street-view-btn" style="background-color: #4285F4; color: white; border: none; padding: 6px 12px; border-radius: 4px; margin-top: 8px; cursor: pointer; width: 100%;">
+                    Open Google Street View
+                  </button>
+                </div>
+              `);
+              
               currentMarker.setLngLat([longitude, latitude]).addTo(map);
             }
             
@@ -169,6 +223,18 @@ export default function GeospatialLocation() {
             
             // Update the marker position
             if (currentMarker) {
+              // Update popup content with new coordinates and current time
+              const currentDate = new Date().toLocaleString();
+              currentMarker.getPopup().setHTML(`
+                <div style="padding: 8px;">
+                  <p><strong>Created:</strong> ${currentDate}</p>
+                  <p><strong>Coordinates:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
+                  <button id="street-view-btn" style="background-color: #4285F4; color: white; border: none; padding: 6px 12px; border-radius: 4px; margin-top: 8px; cursor: pointer; width: 100%;">
+                    Open Google Street View
+                  </button>
+                </div>
+              `);
+              
               currentMarker.setLngLat([lng, lat]).addTo(map);
             }
             
@@ -325,6 +391,18 @@ export default function GeospatialLocation() {
         // Update the map marker if map is loaded
         if (currentMarker && mapLoaded && mapInstance) {
           try {
+            // Update popup content with new coordinates and current time
+            const currentDate = new Date().toLocaleString();
+            currentMarker.getPopup().setHTML(`
+              <div style="padding: 8px;">
+                <p><strong>Created:</strong> ${currentDate}</p>
+                <p><strong>Coordinates:</strong> ${latitude.toFixed(6)}, ${longitude.toFixed(6)}</p>
+                <button id="street-view-btn" style="background-color: #4285F4; color: white; border: none; padding: 6px 12px; border-radius: 4px; margin-top: 8px; cursor: pointer; width: 100%;">
+                  Open Google Street View
+                </button>
+              </div>
+            `);
+            
             // Update the marker position
             currentMarker.setLngLat([longitude, latitude]).addTo(mapInstance);
             
@@ -430,7 +508,27 @@ export default function GeospatialLocation() {
             ref={mapContainer} 
             className="w-full h-[400px] rounded-lg border-2 border-[#1e3a8a]"
             style={{ position: 'relative' }}
-          />
+          >
+            {/* Street View overlay */}
+            {showStreetView && streetViewCoords && (
+              <div className="absolute inset-0 z-50 bg-black">
+                <div className="relative w-full h-full">
+                  <iframe
+                    src={`https://www.google.com/maps/embed/v1/streetview?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&location=${streetViewCoords.lat},${streetViewCoords.lng}&heading=210&pitch=10&fov=90`}
+                    style={{ width: '100%', height: '100%', border: 0 }}
+                    allowFullScreen
+                  />
+                  <button
+                    onClick={() => setShowStreetView(false)}
+                    className="absolute top-4 right-4 bg-white rounded-full p-2 shadow-md hover:bg-gray-100"
+                    aria-label="Close Street View"
+                  >
+                    <X className="w-6 h-6 text-gray-700" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="flex gap-2 items-start">
             <div className="space-y-2 flex-1">
