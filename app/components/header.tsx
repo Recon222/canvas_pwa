@@ -1,0 +1,3 @@
+```typescriptreact file="app/components/header.tsx" isDeleted="true"
+...deleted...
+

@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --primary: 221 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+  }
+
+  html {
+    @apply h-full antialiased;
+  }
+
+  body {
+    @apply h-full text-base;
+  }
+}
+
+@layer utilities {
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Fluid typography */
+@layer base {
+  html {
+    font-size: clamp(14px, 1vw + 12px, 16px);
+  }
+}
+
