@@ -211,6 +211,10 @@ export default function GeospatialLocation() {
           }
         })
         
+        // Note: Map click event listener has been commented out to prevent creating new markers when clicking on the map
+        // The user can still interact with existing markers and see their popups
+        // Uncomment this section when you want to enable creating markers by clicking on the map
+        /*
         // Handle click on map to set marker
         map.on('click', (e) => {
           try {
@@ -245,6 +249,7 @@ export default function GeospatialLocation() {
             console.error('Error handling map click:', error)
           }
         })
+        */
         
         // Log any errors
         map.on('error', (e) => {
