@@ -13,8 +13,8 @@ import { Label } from "@/components/ui/label"
 import { ProgressBar } from "@/components/ui/progress-bar"
 import "mapbox-gl/dist/mapbox-gl.css"
 import "@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css"
-// Import types only (not the actual module)
-import type mapboxgl from "mapbox-gl"
+// Import mapboxgl for use in the component
+import mapboxgl from "mapbox-gl"
 
 export default function GeospatialLocation() {
   const { formData, updateForm } = useForm()
@@ -34,7 +34,6 @@ export default function GeospatialLocation() {
       if (mapLoaded) return
       
       try {
-        const mapboxgl = (await import('mapbox-gl')).default
         const MapboxGeocoder = (await import('@mapbox/mapbox-gl-geocoder')).default
         
         // Check if the map container exists
@@ -91,17 +90,11 @@ export default function GeospatialLocation() {
         const markerElement = document.createElement('div');
         markerElement.className = 'custom-marker';
         
-        // Add a source for the single point marker
-        map.on('load', () => {
-          // Add source only if it doesn't exist yet
-          if (!map.getSource('single-point')) {
-            map.addSource('single-point', {
-              type: 'geojson',
-              data: {
-                type: 'FeatureCollection',
-                features: []
-              }
-            })
+        // Function to create a new marker
+        const createMarker = (lngLat: { lng: number; lat: number }) => {
+          // Remove existing marker if it exists
+          if (currentMarker) {
+            currentMarker.remove();
           }
           
           // Create a custom marker instance
@@ -117,16 +110,15 @@ export default function GeospatialLocation() {
             maxWidth: '300px'
           });
           
-          // Add the marker to the map but don't set position yet
-          marker.setLngLat(map.getCenter()).addTo(map);
+          // Add the marker to the map
+          marker.setLngLat(lngLat).addTo(map);
           
-          // Add popup to marker with initial content
+          // Add popup to marker with content
           const currentDate = new Date().toLocaleString();
-          const initialCoords = map.getCenter();
           popup.setHTML(`
             <div style="padding: 8px;">
               <p><strong>Created:</strong> ${currentDate}</p>
-              <p><strong>Coordinates:</strong> ${initialCoords.lat.toFixed(6)}, ${initialCoords.lng.toFixed(6)}</p>
+              <p><strong>Coordinates:</strong> ${lngLat.lat.toFixed(6)}, ${lngLat.lng.toFixed(6)}</p>
               <button id="street-view-btn" style="background-color: #4285F4; color: white; border: none; padding: 6px 12px; border-radius: 4px; margin-top: 8px; cursor: pointer; width: 100%;">
                 Open Google Street View
               </button>
@@ -156,6 +148,23 @@ export default function GeospatialLocation() {
           // Store the marker for later use
           setCurrentMarker(marker);
           
+          return marker;
+        };
+        
+        // Add a source for the single point marker
+        map.on('load', () => {
+          // Add source only if it doesn't exist yet
+          if (!map.getSource('single-point')) {
+            map.addSource('single-point', {
+              type: 'geojson',
+              data: {
+                type: 'FeatureCollection',
+                features: []
+              }
+            })
+          }
+          
+          // Don't create a marker on load - wait for user interaction
           console.log('Map loaded successfully')
           setMapLoaded(true)
         })
@@ -166,22 +175,8 @@ export default function GeospatialLocation() {
             // Get coordinates from the result
             const [longitude, latitude] = event.result.center
             
-            // Update the marker position
-            if (currentMarker) {
-              // Update popup content with new coordinates and current time
-              const currentDate = new Date().toLocaleString();
-              currentMarker.getPopup().setHTML(`
-                <div style="padding: 8px;">
-                  <p><strong>Created:</strong> ${currentDate}</p>
-                  <p><strong>Coordinates:</strong> ${latitude.toFixed(6)}, ${longitude.toFixed(6)}</p>
-                  <button id="street-view-btn" style="background-color: #4285F4; color: white; border: none; padding: 6px 12px; border-radius: 4px; margin-top: 8px; cursor: pointer; width: 100%;">
-                    Open Google Street View
-                  </button>
-                </div>
-              `);
-              
-              currentMarker.setLngLat([longitude, latitude]).addTo(map);
-            }
+            // Create or update marker
+            createMarker({ lng: longitude, lat: latitude });
             
             // Update the form with the selected address
             const address = event.result.place_name
@@ -221,22 +216,8 @@ export default function GeospatialLocation() {
           try {
             const { lng, lat } = e.lngLat
             
-            // Update the marker position
-            if (currentMarker) {
-              // Update popup content with new coordinates and current time
-              const currentDate = new Date().toLocaleString();
-              currentMarker.getPopup().setHTML(`
-                <div style="padding: 8px;">
-                  <p><strong>Created:</strong> ${currentDate}</p>
-                  <p><strong>Coordinates:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
-                  <button id="street-view-btn" style="background-color: #4285F4; color: white; border: none; padding: 6px 12px; border-radius: 4px; margin-top: 8px; cursor: pointer; width: 100%;">
-                    Open Google Street View
-                  </button>
-                </div>
-              `);
-              
-              currentMarker.setLngLat([lng, lat]).addTo(map);
-            }
+            // Create or update marker
+            createMarker({ lng, lat });
             
             // Reverse geocode to get address
             reverseGeocode(lng, lat, mapboxgl.accessToken)
@@ -389,11 +370,32 @@ export default function GeospatialLocation() {
         const { latitude, longitude } = position.coords
         
         // Update the map marker if map is loaded
-        if (currentMarker && mapLoaded && mapInstance) {
+        if (mapLoaded && mapInstance) {
           try {
-            // Update popup content with new coordinates and current time
+            // Remove existing marker if it exists
+            if (currentMarker) {
+              currentMarker.remove();
+            }
+            
+            // Create a new marker
+            const marker = new mapboxgl.Marker({
+              color: '#4285F4',
+              scale: 1.2
+            });
+            
+            // Create a popup for the marker
+            const popup = new mapboxgl.Popup({
+              closeButton: true,
+              closeOnClick: false,
+              maxWidth: '300px'
+            });
+            
+            // Add the marker to the map
+            marker.setLngLat([longitude, latitude]).addTo(mapInstance);
+            
+            // Add popup to marker with content
             const currentDate = new Date().toLocaleString();
-            currentMarker.getPopup().setHTML(`
+            popup.setHTML(`
               <div style="padding: 8px;">
                 <p><strong>Created:</strong> ${currentDate}</p>
                 <p><strong>Coordinates:</strong> ${latitude.toFixed(6)}, ${longitude.toFixed(6)}</p>
@@ -402,9 +404,29 @@ export default function GeospatialLocation() {
                 </button>
               </div>
             `);
+            marker.setPopup(popup);
             
-            // Update the marker position
-            currentMarker.setLngLat([longitude, latitude]).addTo(mapInstance);
+            // Add event listener for Street View button
+            marker.getElement().addEventListener('click', () => {
+              setTimeout(() => {
+                const streetViewBtn = document.getElementById('street-view-btn');
+                if (streetViewBtn) {
+                  streetViewBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setStreetViewCoords({
+                      lat: marker.getLngLat().lat,
+                      lng: marker.getLngLat().lng
+                    });
+                    setShowStreetView(true);
+                    marker.togglePopup(); // Close the popup
+                  });
+                }
+              }, 100);
+            });
+            
+            // Store the marker for later use
+            setCurrentMarker(marker);
             
             // Center the map on the location
             mapInstance.flyTo({
