@@ -69,6 +69,7 @@ interface CanvassForm {
   }
   geospatial: {
     address: string
+    abbreviatedAddress?: string
     latitude?: number
     longitude?: number
   }

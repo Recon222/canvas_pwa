@@ -23,6 +23,7 @@ export default function GeospatialLocation() {
   const geocoderContainer = useRef<any>(null)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [currentMarker, setCurrentMarker] = useState<any>(null)
+  const [mapInstance, setMapInstance] = useState<any>(null)
   const [geocoder, setGeocoder] = useState<any>(null)
 
   useEffect(() => {
@@ -46,8 +47,12 @@ export default function GeospatialLocation() {
           style: 'mapbox://styles/mapbox/streets-v12',
           center: [-79.7624, 43.6532], // Default to Brampton/Mississauga area
           zoom: 10,
-          preserveDrawingBuffer: true // Add this to prevent canvas clearing
+          preserveDrawingBuffer: true, // Add this to prevent canvas clearing
+          attributionControl: false // Disable default attribution control
         })
+        
+        // Store map reference
+        setMapInstance(map)
         
         // Add navigation controls
         map.addControl(new mapboxgl.NavigationControl(), 'top-right')
@@ -59,7 +64,8 @@ export default function GeospatialLocation() {
           marker: false, // We'll handle the marker ourselves
           placeholder: 'Search for addresses in Ontario',
           countries: 'ca', // Limit to Canada
-          bbox: [-95.1562, 41.6751, -74.3364, 56.8613], // Rough bounding box for Ontario
+          bbox: [-95.1562, 41.6751, -74.3364, 56.8613], // Rough bounding box for Ontario,
+          flyTo: false, // Disable automatic flying to result
           filter: function(item) {
             // Filter to only show results in Ontario
             return item.context?.some(context => {
@@ -79,6 +85,10 @@ export default function GeospatialLocation() {
           geocoderContainer.current.appendChild(geocoderInstance.onAdd(map))
         }
         
+        // Create a default marker element with custom color
+        const markerElement = document.createElement('div');
+        markerElement.className = 'custom-marker';
+        
         // Add a source for the single point marker
         map.on('load', () => {
           // Add source only if it doesn't exist yet
@@ -90,19 +100,19 @@ export default function GeospatialLocation() {
                 features: []
               }
             })
-            
-            map.addLayer({
-              id: 'point',
-              source: 'single-point',
-              type: 'circle',
-              paint: {
-                'circle-radius': 10,
-                'circle-color': '#1e3a8a',
-                'circle-stroke-width': 2,
-                'circle-stroke-color': '#ffffff'
-              }
-            })
           }
+          
+          // Create a custom marker instance
+          const marker = new mapboxgl.Marker({
+            color: '#4285F4', // Lighter blue color
+            scale: 1.2 // Slightly larger than default
+          });
+          
+          // Add the marker to the map but don't set position yet
+          marker.setLngLat(map.getCenter());
+          
+          // Store the marker for later use
+          setCurrentMarker(marker);
           
           console.log('Map loaded successfully')
           setMapLoaded(true)
@@ -111,31 +121,41 @@ export default function GeospatialLocation() {
         // Listen for the geocoder result event
         geocoderInstance.on('result', (event) => {
           try {
-            // Update the marker on the map
-            // @ts-ignore - Mapbox types don't properly recognize setData on GeoJSON sources
-            map.getSource('single-point').setData(event.result.geometry)
+            // Get coordinates from the result
+            const [longitude, latitude] = event.result.center
+            
+            // Update the marker position
+            if (currentMarker) {
+              currentMarker.setLngLat([longitude, latitude]).addTo(map);
+            }
             
             // Update the form with the selected address
             const address = event.result.place_name
-            
-            // Store coordinates in the form
-            const [longitude, latitude] = event.result.center
+            const abbreviatedAddress = abbreviateAddress(address)
             
             // Update form state in a single operation
             updateForm({
               geospatial: {
                 ...formData.geospatial,
-                address: address,
+                address: address, // Store the full address in the form data
+                abbreviatedAddress: abbreviatedAddress, // Also store the abbreviated version
                 longitude: longitude,
                 latitude: latitude
               }
             })
             
-            // Center the map on the selected location
+            // Update the geocoder input with the abbreviated address
+            if (geocoderInstance && geocoderInstance._inputEl) {
+              geocoderInstance._inputEl.value = abbreviatedAddress
+            }
+            
+            // Center the map on the selected location with a smooth animation
             map.flyTo({
               center: [longitude, latitude],
               zoom: 15,
-              essential: true
+              essential: true,
+              speed: 0.8, // Slower animation
+              curve: 1 // Linear animation
             })
           } catch (error) {
             console.error('Error handling geocoder result:', error)
@@ -147,32 +167,28 @@ export default function GeospatialLocation() {
           try {
             const { lng, lat } = e.lngLat
             
-            // Update the marker
-            // @ts-ignore - Mapbox types don't properly recognize setData on GeoJSON sources
-            map.getSource('single-point').setData({
-              type: 'Feature',
-              geometry: {
-                type: 'Point',
-                coordinates: [lng, lat]
-              },
-              properties: {}
-            })
+            // Update the marker position
+            if (currentMarker) {
+              currentMarker.setLngLat([lng, lat]).addTo(map);
+            }
             
             // Reverse geocode to get address
             reverseGeocode(lng, lat, mapboxgl.accessToken)
               .then(address => {
+                const abbreviatedAddress = abbreviateAddress(address)
                 updateForm({
                   geospatial: {
                     ...formData.geospatial,
                     address: address,
+                    abbreviatedAddress: abbreviatedAddress,
                     longitude: lng,
                     latitude: lat
                   }
                 })
                 
-                // Update the geocoder input with the address
+                // Update the geocoder input with the abbreviated address
                 if (geocoderInstance && geocoderInstance._inputEl) {
-                  geocoderInstance._inputEl.value = address
+                  geocoderInstance._inputEl.value = abbreviatedAddress
                 }
               })
               .catch(error => {
@@ -187,9 +203,6 @@ export default function GeospatialLocation() {
         map.on('error', (e) => {
           console.error('Mapbox error:', e)
         })
-        
-        // Store map reference for cleanup
-        setCurrentMarker(map)
         
         // Clean up on unmount
         return () => {
@@ -208,7 +221,10 @@ export default function GeospatialLocation() {
     return () => {
       clearTimeout(timer)
       if (currentMarker) {
-        currentMarker.remove()
+        currentMarker.remove();
+      }
+      if (mapInstance) {
+        mapInstance.remove();
       }
       // Clean up geocoder
       if (geocoder && geocoderContainer.current) {
@@ -239,6 +255,49 @@ export default function GeospatialLocation() {
     }
   }
 
+  // Function to abbreviate address text
+  const abbreviateAddress = (address: string) => {
+    // Common street type abbreviations
+    const abbreviations: Record<string, string> = {
+      'Street': 'St',
+      'Avenue': 'Ave',
+      'Boulevard': 'Blvd',
+      'Drive': 'Dr',
+      'Road': 'Rd',
+      'Lane': 'Ln',
+      'Court': 'Ct',
+      'Circle': 'Cir',
+      'Place': 'Pl',
+      'Highway': 'Hwy',
+      'Crescent': 'Cres',
+      'Parkway': 'Pkwy',
+      'Square': 'Sq',
+      'Terrace': 'Terr',
+      'Trail': 'Trl',
+      'Way': 'Wy',
+      'Ontario': 'ON',
+      'Canada': 'CA',
+      'North': 'N',
+      'South': 'S',
+      'East': 'E',
+      'West': 'W',
+      'Northwest': 'NW',
+      'Northeast': 'NE',
+      'Southwest': 'SW',
+      'Southeast': 'SE'
+    }
+    
+    let result = address
+    
+    // Replace full words with abbreviations
+    Object.entries(abbreviations).forEach(([full, abbr]) => {
+      const regex = new RegExp(`\\b${full}\\b`, 'g')
+      result = result.replace(regex, abbr)
+    })
+    
+    return result
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     router.push("/create-canvass/completion")
@@ -264,24 +323,13 @@ export default function GeospatialLocation() {
         const { latitude, longitude } = position.coords
         
         // Update the map marker if map is loaded
-        if (currentMarker && mapLoaded) {
+        if (currentMarker && mapLoaded && mapInstance) {
           try {
-            // Get the source from the map
-            const source = currentMarker.getSource('single-point')
-            if (source) {
-              // @ts-ignore - Mapbox types don't properly recognize setData on GeoJSON sources
-              source.setData({
-                type: 'Feature',
-                geometry: {
-                  type: 'Point',
-                  coordinates: [longitude, latitude]
-                },
-                properties: {}
-              })
-            }
+            // Update the marker position
+            currentMarker.setLngLat([longitude, latitude]).addTo(mapInstance);
             
             // Center the map on the location
-            currentMarker.flyTo({
+            mapInstance.flyTo({
               center: [longitude, latitude],
               zoom: 15,
               essential: true
@@ -290,20 +338,22 @@ export default function GeospatialLocation() {
             // Get the address from coordinates
             const accessToken = process.env.NEXT_PUBLIC_MAPBOX_GL_ACCESS_TOKEN ?? ''
             const address = await reverseGeocode(longitude, latitude, accessToken)
+            const abbreviatedAddress = abbreviateAddress(address)
             
             // Update form with location data
             updateForm({
               geospatial: {
                 ...formData.geospatial,
                 address: address,
+                abbreviatedAddress: abbreviatedAddress,
                 longitude: longitude,
                 latitude: latitude
               }
             })
             
-            // Update the geocoder input with the address
+            // Update the geocoder input with the abbreviated address
             if (geocoder && geocoder._inputEl) {
-              geocoder._inputEl.value = address
+              geocoder._inputEl.value = abbreviatedAddress
             }
           } catch (error) {
             console.error('Error updating map with geolocation:', error)
@@ -319,6 +369,47 @@ export default function GeospatialLocation() {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Custom styles to position geocoder suggestions ABOVE the input field instead of below */}
+      <style jsx global>{`
+        /* Position suggestions above the input field */
+        .geocoder-container .mapboxgl-ctrl-geocoder .suggestions {
+          top: auto;
+          bottom: 100%;
+          margin-bottom: 8px;
+          box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.1);
+          max-height: 200px;
+          overflow-y: auto;
+          z-index: 10;
+        }
+        
+        /* Ensure the geocoder container has proper positioning */
+        .geocoder-container .mapboxgl-ctrl-geocoder {
+          position: relative;
+          width: 100% !important;
+          max-width: none !important;
+          box-shadow: none;
+          border: none;
+        }
+        
+        /* Ensure the suggestions container is properly positioned */
+        .geocoder-container .mapboxgl-ctrl-geocoder .suggestions > .active > a,
+        .geocoder-container .mapboxgl-ctrl-geocoder .suggestions > li > a {
+          padding: 8px 12px;
+        }
+
+        /* Hide Mapbox attribution completely */
+        .mapboxgl-ctrl-attrib {
+          display: none !important;
+        }
+
+        /* Truncate address text in geocoder input */
+        .mapboxgl-ctrl-geocoder--input {
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+      `}</style>
+      
       {/* Banner with left-aligned logo and centered title */}
       <div className="m-4 bg-[#1e3a8a] rounded-lg">
         <div className="flex items-center p-4">
@@ -348,22 +439,28 @@ export default function GeospatialLocation() {
                 {/* Geocoder container */}
                 <div 
                   ref={geocoderContainer} 
-                  className="flex-1"
+                  className="flex-1 geocoder-container"
                   style={{ 
                     minHeight: '38px',
                     border: '2px solid #1e3a8a',
-                    borderRadius: '0.25rem'
+                    borderRadius: '0.25rem',
+                    position: 'relative'
                   }}
                 />
-                <Button type="button" onClick={handleGeolocate} className="bg-[#1e3a8a] hover:bg-[#162c69]">
-                  <MapPin className="w-4 h-4 mr-2" />
-                  Geolocate
+                <Button 
+                  type="button" 
+                  onClick={handleGeolocate} 
+                  className="bg-[#1e3a8a] hover:bg-[#162c69] px-2"
+                  aria-label="Get current location"
+                  title="Get current location"
+                >
+                  <MapPin className="w-4 h-4" />
                 </Button>
               </div>
             </div>
           </div>
 
-          <div className="flex justify-between pt-4">
+          <div className="flex justify-between pt-2 -mt-1">
             <Link href="/create-canvass/follow-up">
               <Button
                 variant="outline"
