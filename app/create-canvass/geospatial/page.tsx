@@ -20,8 +20,10 @@ export default function GeospatialLocation() {
   const { formData, updateForm } = useForm()
   const router = useRouter()
   const mapContainer = useRef<any>(null)
+  const geocoderContainer = useRef<any>(null)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [currentMarker, setCurrentMarker] = useState<any>(null)
+  const [geocoder, setGeocoder] = useState<any>(null)
 
   useEffect(() => {
     // Dynamic import to ensure mapbox-gl is only loaded on the client side
@@ -51,7 +53,7 @@ export default function GeospatialLocation() {
         map.addControl(new mapboxgl.NavigationControl(), 'top-right')
         
         // Initialize the geocoder
-        const geocoder = new MapboxGeocoder({
+        const geocoderInstance = new MapboxGeocoder({
           accessToken: mapboxgl.accessToken,
           mapboxgl: mapboxgl,
           marker: false, // We'll handle the marker ourselves
@@ -69,8 +71,13 @@ export default function GeospatialLocation() {
           }
         })
         
-        // Add the geocoder to the map
-        map.addControl(geocoder, 'top-left')
+        // Store geocoder for later use
+        setGeocoder(geocoderInstance)
+        
+        // Add the geocoder to the container instead of the map
+        if (geocoderContainer.current) {
+          geocoderContainer.current.appendChild(geocoderInstance.onAdd(map))
+        }
         
         // Add a source for the single point marker
         map.on('load', () => {
@@ -102,7 +109,7 @@ export default function GeospatialLocation() {
         })
         
         // Listen for the geocoder result event
-        geocoder.on('result', (event) => {
+        geocoderInstance.on('result', (event) => {
           try {
             // Update the marker on the map
             // @ts-ignore - Mapbox types don't properly recognize setData on GeoJSON sources
@@ -162,6 +169,11 @@ export default function GeospatialLocation() {
                     latitude: lat
                   }
                 })
+                
+                // Update the geocoder input with the address
+                if (geocoderInstance && geocoderInstance._inputEl) {
+                  geocoderInstance._inputEl.value = address
+                }
               })
               .catch(error => {
                 console.error('Error reverse geocoding:', error)
@@ -197,6 +209,14 @@ export default function GeospatialLocation() {
       clearTimeout(timer)
       if (currentMarker) {
         currentMarker.remove()
+      }
+      // Clean up geocoder
+      if (geocoder && geocoderContainer.current) {
+        try {
+          geocoderContainer.current.innerHTML = ''
+        } catch (error) {
+          console.error('Error cleaning up geocoder:', error)
+        }
       }
     }
   }, []) // Remove dependencies to prevent re-initialization
@@ -280,6 +300,11 @@ export default function GeospatialLocation() {
                 latitude: latitude
               }
             })
+            
+            // Update the geocoder input with the address
+            if (geocoder && geocoder._inputEl) {
+              geocoder._inputEl.value = address
+            }
           } catch (error) {
             console.error('Error updating map with geolocation:', error)
           }
@@ -320,12 +345,15 @@ export default function GeospatialLocation() {
             <div className="space-y-2 flex-1">
               <Label className="text-black">Address:</Label>
               <div className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="Enter address"
-                  value={formData.geospatial?.address || ""}
-                  onChange={(e) => updateGeospatial("address", e.target.value)}
-                  className="w-full border-2 border-[#1e3a8a] bg-white rounded"
+                {/* Geocoder container */}
+                <div 
+                  ref={geocoderContainer} 
+                  className="flex-1"
+                  style={{ 
+                    minHeight: '38px',
+                    border: '2px solid #1e3a8a',
+                    borderRadius: '0.25rem'
+                  }}
                 />
                 <Button type="button" onClick={handleGeolocate} className="bg-[#1e3a8a] hover:bg-[#162c69]">
                   <MapPin className="w-4 h-4 mr-2" />
