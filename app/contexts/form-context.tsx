@@ -1,8 +1,10 @@
 "use client"
 
-import { createContext, useContext, useState, type ReactNode } from "react"
+import { createContext, useContext, useState, type ReactNode, useEffect } from "react"
+import { v4 as uuidv4 } from 'uuid'
 
 interface CanvassForm {
+  id: string
   occurrence: string
   date: string
   time: string
@@ -72,6 +74,7 @@ interface CanvassForm {
     abbreviatedAddress?: string
     latitude?: number
     longitude?: number
+    markerId?: string
   }
 }
 
@@ -84,6 +87,7 @@ const FormContext = createContext<FormContextType>(null)
 
 export function FormProvider({ children }: { children: ReactNode }) {
   const [formData, setFormData] = useState<CanvassForm>({
+    id: uuidv4(),
     occurrence: "1",
     date: "",
     time: "",

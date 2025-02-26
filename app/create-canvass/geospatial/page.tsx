@@ -15,6 +15,8 @@ import "mapbox-gl/dist/mapbox-gl.css"
 import "@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css"
 // Import mapboxgl for use in the component
 import mapboxgl from "mapbox-gl"
+// Import marker utilities
+import { createMarker, storeMarker, MarkerData } from "../../lib/marker-utils"
 
 export default function GeospatialLocation() {
   const { formData, updateForm } = useForm()
@@ -23,6 +25,7 @@ export default function GeospatialLocation() {
   const geocoderContainer = useRef<any>(null)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [currentMarker, setCurrentMarker] = useState<any>(null)
+  const [currentMarkerData, setCurrentMarkerData] = useState<MarkerData | null>(null)
   const [mapInstance, setMapInstance] = useState<any>(null)
   const [geocoder, setGeocoder] = useState<any>(null)
   const [showStreetView, setShowStreetView] = useState(false)
@@ -91,11 +94,29 @@ export default function GeospatialLocation() {
         markerElement.className = 'custom-marker';
         
         // Function to create a new marker
-        const createMarker = (lngLat: { lng: number; lat: number }) => {
+        const createMapMarker = (lngLat: { lng: number; lat: number }, address?: string, abbreviatedAddress?: string) => {
           // Remove existing marker if it exists
           if (currentMarker) {
             currentMarker.remove();
           }
+          
+          // Create marker data with UUID
+          const markerData = createMarker(
+            lngLat.lat,
+            lngLat.lng,
+            {
+              address,
+              abbreviatedAddress,
+              type: 'canvass',
+              metadata: {
+                formId: formData.id
+              }
+            }
+          );
+          
+          // Store marker data
+          storeMarker(markerData);
+          setCurrentMarkerData(markerData);
           
           // Create a custom marker instance
           const marker = new mapboxgl.Marker({
@@ -114,10 +135,10 @@ export default function GeospatialLocation() {
           marker.setLngLat(lngLat).addTo(map);
           
           // Add popup to marker with content
-          const currentDate = new Date().toLocaleString();
           popup.setHTML(`
             <div style="padding: 8px;">
-              <p><strong>Created:</strong> ${currentDate}</p>
+              <p><strong>ID:</strong> ${markerData.id.substring(0, 8)}...</p>
+              <p><strong>Created:</strong> ${new Date(markerData.createdAt).toLocaleString()}</p>
               <p><strong>Coordinates:</strong> ${lngLat.lat.toFixed(6)}, ${lngLat.lng.toFixed(6)}</p>
               <button id="street-view-btn" style="background-color: #4285F4; color: white; border: none; padding: 6px 12px; border-radius: 4px; margin-top: 8px; cursor: pointer; width: 100%;">
                 Open Google Street View
@@ -148,6 +169,18 @@ export default function GeospatialLocation() {
           // Store the marker for later use
           setCurrentMarker(marker);
           
+          // Update form state with marker data
+          updateForm({
+            geospatial: {
+              ...formData.geospatial,
+              address: address || '',
+              abbreviatedAddress: abbreviatedAddress || '',
+              longitude: lngLat.lng,
+              latitude: lngLat.lat,
+              markerId: markerData.id
+            }
+          });
+          
           return marker;
         };
         
@@ -176,26 +209,11 @@ export default function GeospatialLocation() {
             const [longitude, latitude] = event.result.center
             
             // Create or update marker
-            createMarker({ lng: longitude, lat: latitude });
-            
-            // Update the form with the selected address
-            const address = event.result.place_name
-            const abbreviatedAddress = abbreviateAddress(address)
-            
-            // Update form state in a single operation
-            updateForm({
-              geospatial: {
-                ...formData.geospatial,
-                address: address, // Store the full address in the form data
-                abbreviatedAddress: abbreviatedAddress, // Also store the abbreviated version
-                longitude: longitude,
-                latitude: latitude
-              }
-            })
+            createMapMarker({ lng: longitude, lat: latitude }, event.result.place_name, abbreviateAddress(event.result.place_name))
             
             // Update the geocoder input with the abbreviated address
             if (geocoderInstance && geocoderInstance._inputEl) {
-              geocoderInstance._inputEl.value = abbreviatedAddress
+              geocoderInstance._inputEl.value = abbreviateAddress(event.result.place_name)
             }
             
             // Center the map on the selected location with a smooth animation
@@ -221,7 +239,7 @@ export default function GeospatialLocation() {
             const { lng, lat } = e.lngLat
             
             // Create or update marker
-            createMarker({ lng, lat });
+            createMapMarker({ lng, lat });
             
             // Reverse geocode to get address
             reverseGeocode(lng, lat, mapboxgl.accessToken)
